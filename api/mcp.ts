@@ -1,6 +1,6 @@
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { IncomingMessage, ServerResponse } from "http";
 import { z } from "zod";
 
 const API_KEY = process.env.YOUTUBE_API_KEY || "";
@@ -50,12 +50,7 @@ function createServer(): McpServer {
     const ch = data?.items?.[0];
     if (!ch) return { content: [{ type: "text" as const, text: "Channel not found" }] };
     const s = ch.statistics, sn = ch.snippet;
-    return {
-      content: [{
-        type: "text" as const,
-        text: `📺 ${sn.title} (${sn.customUrl})\n👥 Subscribers: ${fmt(Number(s.subscriberCount))}\n👁️ Total Views: ${fmt(Number(s.viewCount))}\n🎬 Videos: ${s.videoCount}\n🌍 Country: ${sn.country || "N/A"}\n📅 Created: ${sn.publishedAt}\n🆔 Channel ID: ${ch.id}`
-      }]
-    };
+    return { content: [{ type: "text" as const, text: `Channel: ${sn.title} (${sn.customUrl})\nSubscribers: ${fmt(Number(s.subscriberCount))}\nTotal Views: ${fmt(Number(s.viewCount))}\nVideos: ${s.videoCount}\nCountry: ${sn.country || "N/A"}\nCreated: ${sn.publishedAt}\nChannel ID: ${ch.id}` }] };
   });
 
   server.registerTool("yt_recent_videos", {
@@ -76,9 +71,9 @@ function createServer(): McpServer {
     const lines = vd.items.map((v: any, i: number) => {
       const views = Number(v.statistics.viewCount || 0);
       total += views;
-      return `${i + 1}. ${v.snippet.title}\n   👁️ ${fmt(views)} | 👍 ${fmt(Number(v.statistics.likeCount || 0))} | 📅 ${v.snippet.publishedAt.slice(0, 10)}`;
+      return `${i + 1}. ${v.snippet.title}\n   Views: ${fmt(views)} | Likes: ${fmt(Number(v.statistics.likeCount || 0))} | Date: ${v.snippet.publishedAt.slice(0, 10)}`;
     });
-    return { content: [{ type: "text" as const, text: `📊 ${vd.items.length} videos | Total: ${fmt(total)} | Avg: ${fmt(Math.round(total / vd.items.length))}/video\n\n${lines.join("\n\n")}` }] };
+    return { content: [{ type: "text" as const, text: `${vd.items.length} videos | Total: ${fmt(total)} | Avg: ${fmt(Math.round(total / vd.items.length))}/video\n\n${lines.join("\n\n")}` }] };
   });
 
   server.registerTool("yt_video_details", {
@@ -90,12 +85,7 @@ function createServer(): McpServer {
     const data: any = await ytFetch("videos", { part: "snippet,statistics,contentDetails", id: video_id });
     const v = data?.items?.[0];
     if (!v) return { content: [{ type: "text" as const, text: "Video not found" }] };
-    return {
-      content: [{
-        type: "text" as const,
-        text: `🎬 ${v.snippet.title}\n📺 ${v.snippet.channelTitle}\n👁️ Views: ${fmt(Number(v.statistics.viewCount))}\n👍 Likes: ${fmt(Number(v.statistics.likeCount || 0))}\n💬 Comments: ${fmt(Number(v.statistics.commentCount || 0))}\n⏱️ Duration: ${v.contentDetails.duration}\n📅 Published: ${v.snippet.publishedAt}\n🏷️ Tags: ${(v.snippet.tags || []).slice(0, 10).join(", ") || "None"}`
-      }]
-    };
+    return { content: [{ type: "text" as const, text: `Title: ${v.snippet.title}\nChannel: ${v.snippet.channelTitle}\nViews: ${fmt(Number(v.statistics.viewCount))}\nLikes: ${fmt(Number(v.statistics.likeCount || 0))}\nComments: ${fmt(Number(v.statistics.commentCount || 0))}\nDuration: ${v.contentDetails.duration}\nPublished: ${v.snippet.publishedAt}\nTags: ${(v.snippet.tags || []).slice(0, 10).join(", ") || "None"}` }] };
   });
 
   server.registerTool("yt_search", {
@@ -112,17 +102,15 @@ function createServer(): McpServer {
     if (!data.items?.length) return { content: [{ type: "text" as const, text: "No results" }] };
     const results = data.items.map((item: any, i: number) => {
       const id = item.id.videoId || item.id.channelId || item.id.playlistId;
-      return `${i + 1}. ${item.snippet.title}\n   📺 ${item.snippet.channelTitle} | ID: ${id}`;
+      return `${i + 1}. ${item.snippet.title}\n   Channel: ${item.snippet.channelTitle} | ID: ${id}`;
     });
-    return { content: [{ type: "text" as const, text: `🔍 "${query}":\n\n${results.join("\n\n")}` }] };
+    return { content: [{ type: "text" as const, text: `Results for "${query}":\n\n${results.join("\n\n")}` }] };
   });
 
   server.registerTool("yt_compare_channels", {
     title: "Compare YouTube Channels",
-    description: "Compare stats of 2-5 YouTube channels side by side. Provide comma-separated channel IDs.",
-    inputSchema: {
-      channel_ids: z.string().describe("Comma-separated channel IDs"),
-    },
+    description: "Compare stats of 2-5 YouTube channels. Provide comma-separated channel IDs.",
+    inputSchema: { channel_ids: z.string().describe("Comma-separated channel IDs") },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, async ({ channel_ids }) => {
     const ids = channel_ids.split(",").map(s => s.trim()).filter(Boolean);
@@ -131,9 +119,9 @@ function createServer(): McpServer {
     if (!data.items?.length) return { content: [{ type: "text" as const, text: "No channels found" }] };
     const lines = data.items.map((ch: any) => {
       const s = ch.statistics;
-      return `📺 ${ch.snippet.title}\n   👥 ${fmt(Number(s.subscriberCount))} subs | 👁️ ${fmt(Number(s.viewCount))} views | 🎬 ${s.videoCount} videos`;
+      return `${ch.snippet.title}\n   Subs: ${fmt(Number(s.subscriberCount))} | Views: ${fmt(Number(s.viewCount))} | Videos: ${s.videoCount}`;
     });
-    return { content: [{ type: "text" as const, text: `📊 Comparison:\n\n${lines.join("\n\n")}` }] };
+    return { content: [{ type: "text" as const, text: `Channel Comparison:\n\n${lines.join("\n\n")}` }] };
   });
 
   server.registerTool("yt_channel_analytics", {
@@ -155,39 +143,34 @@ function createServer(): McpServer {
     const sorted = [...videos].sort((a: any, b: any) => b.views - a.views);
     const top3 = sorted.slice(0, 3).map((v: any, i: number) => `   ${i + 1}. ${v.title} (${fmt(v.views)})`).join("\n");
     const bot3 = sorted.slice(-3).reverse().map((v: any, i: number) => `   ${i + 1}. ${v.title} (${fmt(v.views)})`).join("\n");
-    return {
-      content: [{
-        type: "text" as const,
-        text: `📊 Last ${videos.length} videos:\n\n📈 Total Views: ${fmt(totalV)}\n📊 Avg Views: ${fmt(Math.round(totalV / videos.length))}\n👍 Avg Likes: ${fmt(Math.round(totalL / videos.length))}\n📐 Like/View: ${((totalL / totalV) * 100).toFixed(1)}%\n\n🏆 TOP 3:\n${top3}\n\n📉 BOTTOM 3:\n${bot3}\n\n📅 Range: ${videos[videos.length - 1]?.date?.slice(0, 10)} → ${videos[0]?.date?.slice(0, 10)}`
-      }]
-    };
+    return { content: [{ type: "text" as const, text: `Last ${videos.length} videos:\n\nTotal Views: ${fmt(totalV)}\nAvg Views: ${fmt(Math.round(totalV / videos.length))}\nAvg Likes: ${fmt(Math.round(totalL / videos.length))}\nLike/View: ${((totalL / totalV) * 100).toFixed(1)}%\n\nTOP 3:\n${top3}\n\nBOTTOM 3:\n${bot3}\n\nRange: ${videos[videos.length - 1]?.date?.slice(0, 10)} to ${videos[0]?.date?.slice(0, 10)}` }] };
   });
 
   return server;
 }
 
-// Vercel serverless handler
-export default async function handler(req: IncomingMessage & { body?: any }, res: ServerResponse) {
-  // Handle CORS
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept, mcp-session-id");
 
   if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
+    res.status(204).end();
     return;
   }
 
   if (req.method === "GET") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", server: "youtube-mcp-server" }));
+    res.status(200).json({ status: "ok", server: "youtube-mcp-server" });
+    return;
+  }
+
+  if (req.method === "DELETE") {
+    res.status(200).json({ status: "session ended" });
     return;
   }
 
   if (req.method !== "POST") {
-    res.writeHead(405);
-    res.end("Method not allowed");
+    res.status(405).end("Method not allowed");
     return;
   }
 
@@ -203,7 +186,6 @@ export default async function handler(req: IncomingMessage & { body?: any }, res
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
     console.error("MCP Error:", error);
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Internal server error" }));
+    res.status(500).json({ error: "Internal server error" });
   }
 }
